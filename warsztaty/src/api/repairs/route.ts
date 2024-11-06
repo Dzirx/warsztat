@@ -3,11 +3,10 @@ import { db } from '@/lib/db/config';
 import { repairs, vehicles, workshops } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
-// Dodajemy export const runtime = 'edge' aby upewnić się, że endpoint działa na Vercel
 export const runtime = 'edge';
 
-// Dodajemy konfigurację CORS
-export async function OPTIONS(request: Request) {
+// Usuwamy nieużywany parametr request
+export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
     headers: {
@@ -20,14 +19,12 @@ export async function OPTIONS(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    // Dodajemy nagłówki CORS do odpowiedzi
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
 
-    // Sprawdzamy Content-Type
     const contentType = request.headers.get('content-type');
     if (!contentType?.includes('application/json')) {
       return NextResponse.json(
@@ -54,7 +51,6 @@ export async function POST(request: Request) {
 
     for (const record of data) {
       try {
-        // Sprawdzanie warsztatu
         const workshop = await db
           .select()
           .from(workshops)
@@ -67,7 +63,6 @@ export async function POST(request: Request) {
           continue;
         }
 
-        // Sprawdzanie/dodawanie pojazdu
         const existingVehicle = await db
           .select()
           .from(vehicles)
@@ -82,7 +77,6 @@ export async function POST(request: Request) {
           });
         }
 
-        // Dodawanie naprawy
         await db.insert(repairs).values({
           vehicleVin: record.vin,
           workshopId: workshop[0].id,
@@ -109,7 +103,6 @@ export async function POST(request: Request) {
   }
 }
 
-// Dodajemy metodę GET do testowania
 export async function GET() {
   return NextResponse.json({
     status: 'API działa poprawnie',
