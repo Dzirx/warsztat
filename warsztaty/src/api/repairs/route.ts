@@ -1,26 +1,48 @@
-import { db } from '@/lib/db/config'
-import { repairs, vehicles, workshops } from '@/lib/db/schema' // dodany import workshops
-import { eq } from 'drizzle-orm'
-import { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/db/config';
+import { repairs, vehicles, workshops } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 
-// Typ dla danych przychodzących z SQL Server
-interface SQLServerRepairData {
-  vin: string;
-  workshop_code: string;  // kod warsztatu
-  part_name: string;     // nazwa części/usługi
-  description?: string;  // opcjonalny opis
-  repair_date?: string;  // data naprawy w formacie ISO
+// Dodajemy export const runtime = 'edge' aby upewnić się, że endpoint działa na Vercel
+export const runtime = 'edge';
+
+// Dodajemy konfigurację CORS
+export async function OPTIONS(request: Request) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 }
 
 export async function POST(request: Request) {
   try {
-    // Parsowanie danych przychodzących
-    const data = (await request.json()) as SQLServerRepairData[];
+    // Dodajemy nagłówki CORS do odpowiedzi
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+
+    // Sprawdzamy Content-Type
+    const contentType = request.headers.get('content-type');
+    if (!contentType?.includes('application/json')) {
+      return NextResponse.json(
+        { error: 'Content-Type must be application/json' },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    const data = await request.json();
+    console.log('Otrzymane dane:', data);
 
     if (!Array.isArray(data)) {
       return NextResponse.json(
         { error: 'Dane muszą być tablicą' },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -30,17 +52,22 @@ export async function POST(request: Request) {
       details: [] as string[]
     };
 
-    // Przetwarzanie każdego rekordu
     for (const record of data) {
       try {
-        // Walidacja wymaganych pól
-        if (!record.vin || !record.workshop_code || !record.part_name) {
+        // Sprawdzanie warsztatu
+        const workshop = await db
+          .select()
+          .from(workshops)
+          .where(eq(workshops.code, record.workshop_code))
+          .limit(1);
+
+        if (!workshop || workshop.length === 0) {
           results.errors++;
-          results.details.push(`Brakujące wymagane pola dla VIN: ${record.vin || 'brak'}`);
+          results.details.push(`Nie znaleziono warsztatu o kodzie: ${record.workshop_code}`);
           continue;
         }
 
-        // Sprawdź czy pojazd istnieje, jeśli nie - dodaj
+        // Sprawdzanie/dodawanie pojazdu
         const existingVehicle = await db
           .select()
           .from(vehicles)
@@ -55,25 +82,10 @@ export async function POST(request: Request) {
           });
         }
 
-        // Znajdź warsztat po kodzie
-        const workshopResult = await db
-          .select()
-          .from(workshops)
-          .where(eq(workshops.code, record.workshop_code))
-          .limit(1);
-
-        if (workshopResult.length === 0) {
-          results.errors++;
-          results.details.push(`Nie znaleziono warsztatu o kodzie: ${record.workshop_code}`);
-          continue;
-        }
-
-        const workshop = workshopResult[0];
-
-        // Dodaj naprawę
+        // Dodawanie naprawy
         await db.insert(repairs).values({
           vehicleVin: record.vin,
-          workshopId: workshop.id,
+          workshopId: workshop[0].id,
           partName: record.part_name,
           description: record.description || null,
           repairDate: record.repair_date ? new Date(record.repair_date) : new Date(),
@@ -81,35 +93,32 @@ export async function POST(request: Request) {
 
         results.success++;
       } catch (error) {
+        console.error('Błąd przetwarzania rekordu:', error);
         results.errors++;
-        results.details.push(`Błąd przetwarzania rekordu dla VIN: ${record.vin} - ${error instanceof Error ? error.message : 'Nieznany błąd'}`);
+        results.details.push(`Błąd przetwarzania rekordu: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
-    return NextResponse.json({
-      message: `Przetworzono pomyślnie: ${results.success}, Błędów: ${results.errors}`,
-      details: results.details
-    });
-
+    return NextResponse.json(results, { headers: corsHeaders });
   } catch (error) {
-    console.error('Błąd podczas przetwarzania danych:', error);
+    console.error('Główny błąd:', error);
     return NextResponse.json(
       { error: 'Wystąpił błąd podczas przetwarzania danych' },
-      { status: 500 }
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }
 
-// Metoda GET do sprawdzenia czy endpoint działa
+// Dodajemy metodę GET do testowania
 export async function GET() {
   return NextResponse.json({
     status: 'API działa poprawnie',
     example: {
       vin: "WBA1234567890",
-      workshop_code: "WARSZ001",
+      workshop_code: "LUB001",
       part_name: "Wymiana oleju",
-      description: "Wymiana oleju i filtra",
-      repair_date: "2024-03-15T10:00:00Z"
+      description: "Test API",
+      repair_date: new Date().toISOString()
     }
   });
 }
