@@ -9,7 +9,6 @@ import {
   text,
 } from "drizzle-orm/pg-core";
 import { relations } from 'drizzle-orm';
-import * as schema from './schema';
 
 // Tabela warsztatów z website zamiast alt_phone
 export const workshops = pgTable('workshops', {
