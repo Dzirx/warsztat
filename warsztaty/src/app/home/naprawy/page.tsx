@@ -1,13 +1,11 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import RepairForm from './components/RepairForm'
-import { getRepairs, getWorkshops, addRepair } from './action'
+import { getRepairs, getWorkshops, addRepair } from './actions'
 import type { Repair, Workshop } from './types'
 
 export default function RepairsPage() {
-  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [repairs, setRepairs] = useState<Repair[]>([])
   const [workshops, setWorkshops] = useState<Workshop[]>([])
