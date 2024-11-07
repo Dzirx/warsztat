@@ -1,74 +1,66 @@
-import { db } from '@/lib/db/config'
-import { repairs, workshops, vehicles } from '@/lib/db/schema'
-import { desc, eq } from 'drizzle-orm'
-import { revalidatePath } from 'next/cache'
+'use client'
+
+import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import RepairForm from './components/RepairForm'
+import { getRepairs, getWorkshops, addRepair } from './action'
+import type { Repair, Workshop } from './types'
 
-export default async function RepairsPage() {
-  const allRepairs = await db
-    .select()
-    .from(repairs)
-    .leftJoin(workshops, eq(repairs.workshopId, workshops.id))
-    .orderBy(desc(repairs.repairDate));
+export default function RepairsPage() {
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(false)
+  const [repairs, setRepairs] = useState<Repair[]>([])
+  const [workshops, setWorkshops] = useState<Workshop[]>([])
 
-  const allWorkshops = await db
-    .select()
-    .from(workshops)
-    .orderBy(desc(workshops.name));
-
-  async function addRepair(formData: FormData) {
-    'use server'
-    
+  const refreshData = async () => {
+    setIsLoading(true)
     try {
-      const vin = formData.get('vin') as string
-      const workshopId = Number(formData.get('workshop_id'))
-      const partName = formData.get('part_name') as string
-      const description = formData.get('description') as string
-
-      // Sprawdź czy pojazd istnieje
-      const existingVehicle = await db
-        .select()
-        .from(vehicles)
-        .where(eq(vehicles.vin, vin))
-        .limit(1);
-
-      // Jeśli pojazd nie istnieje, dodaj go
-      if (existingVehicle.length === 0) {
-        await db.insert(vehicles).values({
-          vin: vin,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-      }
-
-      // Teraz możemy dodać naprawę
-      await db.insert(repairs).values({
-        vehicleVin: vin,
-        workshopId,
-        partName,
-        description,
-        repairDate: new Date(),
-      });
-
-      revalidatePath('/home/naprawy');
-      return { success: true };
+      const newRepairs = await getRepairs()
+      const newWorkshops = await getWorkshops()
+      setRepairs(newRepairs as Repair[])
+      setWorkshops(newWorkshops as Workshop[])
     } catch (error) {
-      console.error('Błąd podczas dodawania naprawy:', error);
-      return { 
-        error: error instanceof Error 
-          ? error.message 
-          : 'Wystąpił błąd podczas dodawania naprawy'
-      };
+      console.error('Błąd podczas odświeżania danych:', error)
+    } finally {
+      setIsLoading(false)
     }
   }
 
+  useEffect(() => {
+    refreshData()
+    const interval = setInterval(refreshData, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
   return (
     <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Zarządzanie Naprawami</h1>
-      
-      <RepairForm addRepair={addRepair} workshops={allWorkshops} />
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Zarządzanie Naprawami</h1>
+        <button
+          onClick={refreshData}
+          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-2"
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <>
+              <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              </svg>
+              Odświeżanie...
+            </>
+          ) : (
+            'Odśwież dane'
+          )}
+        </button>
+      </div>
 
-      {/* Lista napraw */}
+      <RepairForm 
+        addRepair={addRepair} 
+        workshops={workshops}
+        onSuccess={refreshData}
+      />
+
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
@@ -81,7 +73,7 @@ export default async function RepairsPage() {
             </tr>
           </thead>
           <tbody>
-            {allRepairs.map((repair) => (
+            {repairs.map((repair) => (
               <tr key={repair.repairs.id} className="border-b hover:bg-gray-50">
                 <td className="p-2">
                   {repair.repairs.repairDate?.toLocaleDateString()}

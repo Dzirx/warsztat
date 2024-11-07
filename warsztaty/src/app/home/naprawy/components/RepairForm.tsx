@@ -6,9 +6,10 @@ import type { Workshop } from '@/lib/db/schema'
 interface RepairFormProps {
   addRepair: (formData: FormData) => Promise<{ error?: string, success?: boolean }>;
   workshops: Workshop[];
+  onSuccess?: () => void;
 }
 
-export default function RepairForm({ addRepair, workshops }: RepairFormProps) {
+export default function RepairForm({ addRepair, workshops, onSuccess }: RepairFormProps) {
   const formRef = useRef<HTMLFormElement>(null)
 
   return (
@@ -19,6 +20,7 @@ export default function RepairForm({ addRepair, workshops }: RepairFormProps) {
           const result = await addRepair(formData)
           if (result.success) {
             formRef.current?.reset()
+            onSuccess?.();  // Wywołaj odświeżenie po udanym dodaniu
           } else if (result.error) {
             alert(result.error)
           }
