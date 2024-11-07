@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import RepairForm from './components/RepairForm'
-import { getRepairs, getWorkshops, addRepair } from './actions'
+import { getRepairs, getWorkshops, addRepair } from './action'
 import type { Repair, Workshop } from './types'
 
 export default function RepairsPage() {
